@@ -7,7 +7,6 @@ include_directories(
     ${EIGEN3_INCLUDE_DIR}
 )
 
-add_executable(pnp_solver main.cpp)
 add_library(${PROJECT_NAME}_lib SHARED
     pnp_solver.cpp
 )
