@@ -1,10 +1,13 @@
 
-
 #include "pnp_solver.h"
 #include <eigen3/Eigen/Dense>
 #include <iostream>
 #include <eigen3/Eigen/QR>
 #include <eigen3/Eigen/SVD>
+
+#include <iostream>
+#include <chrono>
+
 
 bool solvePnPbyDLT ( const Eigen::Matrix3d& K, const std::vector< Eigen::Vector3d >& pts3d, const std::vector< Eigen::Vector2d >& pts2d, Eigen::Matrix3d& R, Eigen::Vector3d& t )
 {
@@ -66,6 +69,10 @@ bool solvePnPbyDLT ( const Eigen::Matrix3d& K, const std::vector< Eigen::Vector3
     // Step 2. Solve Ax = 0 by SVD
     Eigen::JacobiSVD<Eigen::MatrixXd> svd_A ( A, Eigen::ComputeThinV );
     Eigen::MatrixXd V_A = svd_A.matrixV();
+	Eigen::MatrixXd Sigma_A = svd_A.singularValues();
+	
+	// TODO It is better to more singular vectors, as the null space may contain more than one singular vectors.
+	// std::cout << Sigma_A.transpose() << std::endl;
 
     // a1-a12 bar
     double a1 = V_A ( 0, 11 );
@@ -148,14 +155,14 @@ bool solvePnPbyEPnP ( const Eigen::Matrix3d& K, const std::vector< Eigen::Vector
     constructM ( K, hb_coordinates, pts2d, M );
     Eigen::Matrix<double, 12, 4> eigen_vectors;
     getFourEigenVectors ( M, eigen_vectors );
-
+	
     // construct L * \beta = \rho.
     Eigen::Matrix<double, 6, 10> L;
     computeL ( eigen_vectors, L );
 
     Eigen::Matrix<double, 6, 1> rho;
     computeRho ( world_control_points, rho );
-
+	
     // Case N = 2.
     Eigen::Vector4d betas;
     Eigen::Matrix3d tmp_R;
@@ -176,7 +183,7 @@ bool solvePnPbyEPnP ( const Eigen::Matrix3d& K, const std::vector< Eigen::Vector
     double err2 = reprojectionError ( K, pts3d, pts2d, tmp_R, tmp_t );
     R = tmp_R;
     t = tmp_t;
-
+	
     // Case N = 3.
     {
 		solveBetaN3 (eigen_vectors, L, rho, betas );
@@ -241,13 +248,17 @@ void selectControlPoints ( const std::vector< Eigen::Vector3d >& pts3d, std::vec
     }
     Eigen::Matrix3d ATA = A.transpose() * A;
 
-    Eigen::EigenSolver<Eigen::Matrix3d> es ( ATA );
-    Eigen::Matrix3d D = es.pseudoEigenvalueMatrix();
-    Eigen::Matrix3d V = es.pseudoEigenvectors();
+//     Eigen::EigenSolver<Eigen::Matrix3d> es ( ATA );
+//     Eigen::Matrix3d D = es.pseudoEigenvalueMatrix();
+//     Eigen::Matrix3d V = es.pseudoEigenvectors();
+// 	
+	Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> es(ATA);
+	Eigen::Vector3d D = es.eigenvalues();
+	Eigen::MatrixXd V = es.eigenvectors();
 
-    Eigen::Vector3d cw2 = cw1 + sqrt ( D ( 0,0 ) / n ) * V.block ( 0, 0, 3, 1 );
-    Eigen::Vector3d cw3 = cw1 + sqrt ( D ( 1,1 ) / n ) * V.block ( 0, 1, 3, 1 );
-    Eigen::Vector3d cw4 = cw1 + sqrt ( D ( 2,2 ) / n ) * V.block ( 0, 2, 3, 1 );
+    Eigen::Vector3d cw2 = cw1 + sqrt ( D ( 0 ) / n ) * V.block ( 0, 0, 3, 1 );
+    Eigen::Vector3d cw3 = cw1 + sqrt ( D ( 1 ) / n ) * V.block ( 0, 1, 3, 1 );
+    Eigen::Vector3d cw4 = cw1 + sqrt ( D ( 2 ) / n ) * V.block ( 0, 2, 3, 1 );
 
     control_points.push_back ( cw1 );
     control_points.push_back ( cw2 );
@@ -350,23 +361,12 @@ void constructM ( const Eigen::Matrix3d& K, const std::vector< Eigen::Vector4d >
 
 void getFourEigenVectors ( const Eigen::MatrixXd& M, Eigen::Matrix< double, int ( 12 ), int ( 4 ) >& eigen_vectors )
 {
-    // Solve Mx = 0 by SVD
-    Eigen::JacobiSVD<Eigen::MatrixXd> svd ( M, Eigen::ComputeFullU | Eigen::ComputeFullV );
-    Eigen::MatrixXd V = svd.matrixV();
-    // Eigen::MatrixXd Sigma = svd.singularValues();
-    // Eigen::Matrix3d U = svd.matrixU();
-    // std::cout << Sigma.transpose() << std::endl;
-    eigen_vectors = V.block ( 0, 8, 12, 4 );
+ 	Eigen::Matrix<double, 12, 12> MTM = M.transpose() * M;
+ 	Eigen::SelfAdjointEigenSolver<Eigen::Matrix<double, 12, 12>> es(MTM);
 
-// 	Eigen::Matrix<double, 12, 12> MTM = M.transpose() * M;
-// 	Eigen::SelfAdjointEigenSolver<Eigen::Matrix<double, 12, 12>> es(MTM);
-//
-// 	Eigen::VectorXd eigvec;
-// 	Eigen::MatrixXd Vx = es.eigenvalues();
-// 	Eigen::MatrixXd Dx = es.eigenvectors();
-//
-// 	std::cout << eigen_vectors << "\n\n";
-// 	std::cout << Dx  << "\n\n\n\n";
+ 	Eigen::MatrixXd e_vectors = es.eigenvectors();
+	
+	eigen_vectors.block(0,0, 12, 4) = e_vectors.block(0, 0, 12, 4);
 }
 
 void computeL ( const Eigen::Matrix< double, int ( 12 ), int ( 4 ) >& eigen_vectors, Eigen::Matrix< double, int ( 6 ), int ( 10 ) >& L )
@@ -380,16 +380,16 @@ void computeL ( const Eigen::Matrix< double, int ( 12 ), int ( 4 ) >& eigen_vect
         const int idj = idx1[i] * 3;
 
         // the first control point.
-        const Eigen::Vector3d v1i = eigen_vectors.block ( idi, 3, 3, 1 );
-        const Eigen::Vector3d v2i = eigen_vectors.block ( idi, 2, 3, 1 );
-        const Eigen::Vector3d v3i = eigen_vectors.block ( idi, 1, 3, 1 );
-        const Eigen::Vector3d v4i = eigen_vectors.block ( idi, 0, 3, 1 );
+        const Eigen::Vector3d v1i = eigen_vectors.block ( idi, 0, 3, 1 );
+        const Eigen::Vector3d v2i = eigen_vectors.block ( idi, 1, 3, 1 );
+        const Eigen::Vector3d v3i = eigen_vectors.block ( idi, 2, 3, 1 );
+        const Eigen::Vector3d v4i = eigen_vectors.block ( idi, 3, 3, 1 );
 
         // the second control point
-        const Eigen::Vector3d v1j = eigen_vectors.block ( idj, 3, 3, 1 );
-        const Eigen::Vector3d v2j = eigen_vectors.block ( idj, 2, 3, 1 );
-        const Eigen::Vector3d v3j = eigen_vectors.block ( idj, 1, 3, 1 );
-        const Eigen::Vector3d v4j = eigen_vectors.block ( idj, 0, 3, 1 );
+        const Eigen::Vector3d v1j = eigen_vectors.block ( idj, 0, 3, 1 );
+        const Eigen::Vector3d v2j = eigen_vectors.block ( idj, 1, 3, 1 );
+        const Eigen::Vector3d v3j = eigen_vectors.block ( idj, 2, 3, 1 );
+        const Eigen::Vector3d v4j = eigen_vectors.block ( idj, 3, 3, 1 );
 
         Eigen::Vector3d S1 = v1i - v1j;
         Eigen::Vector3d S2 = v2i - v2j;
@@ -566,10 +566,10 @@ void computeCameraControlPoints ( const Eigen::Matrix< double, int ( 12 ), int (
     camera_control_points.reserve ( 4 );
 
     Eigen::Matrix<double, 12, 1> vec =
-        betas[0] * eigen_vectors.block ( 0, 3, 12, 1 ) +
-        betas[1] * eigen_vectors.block ( 0, 2, 12, 1 ) +
-        betas[2] * eigen_vectors.block ( 0, 1, 12, 1 ) +
-        betas[3] * eigen_vectors.block ( 0, 0, 12, 1 );
+        betas[0] * eigen_vectors.block ( 0, 0, 12, 1 ) +
+        betas[1] * eigen_vectors.block ( 0, 1, 12, 1 ) +
+        betas[2] * eigen_vectors.block ( 0, 2, 12, 1 ) +
+        betas[3] * eigen_vectors.block ( 0, 3, 12, 1 );
 
     for ( int i = 0; i < 4; i ++ ) {
         camera_control_points.push_back ( vec.block ( i*3 ,0, 3, 1 ) );
@@ -680,7 +680,5 @@ double reprojectionError ( const Eigen::Matrix3d& K, const std::vector< Eigen::V
 
     return sqrt ( sum_err2 / ( double ) n );
 }
-
-
 
 
