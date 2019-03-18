@@ -69,10 +69,10 @@ bool solvePnPbyDLT ( const Eigen::Matrix3d& K, const std::vector< Eigen::Vector3
     // Step 2. Solve Ax = 0 by SVD
     Eigen::JacobiSVD<Eigen::MatrixXd> svd_A ( A, Eigen::ComputeThinV );
     Eigen::MatrixXd V_A = svd_A.matrixV();
-	Eigen::MatrixXd Sigma_A = svd_A.singularValues();
-	
-	// TODO It is better to more singular vectors, as the null space may contain more than one singular vectors.
-	// std::cout << Sigma_A.transpose() << std::endl;
+    Eigen::MatrixXd Sigma_A = svd_A.singularValues();
+
+    // TODO It is better to more singular vectors, as the null space may contain more than one singular vectors.
+    // std::cout << Sigma_A.transpose() << std::endl;
 
     // a1-a12 bar
     double a1 = V_A ( 0, 11 );
@@ -137,10 +137,11 @@ bool solvePnPbyDLT ( const Eigen::Matrix3d& K, const std::vector< Eigen::Vector3
 
 bool solvePnPbyEPnP ( const Eigen::Matrix3d& K, const std::vector< Eigen::Vector3d >& pts3d, const std::vector< Eigen::Vector2d >& pts2d, Eigen::Matrix3d& R, Eigen::Vector3d& t )
 {
-	// Check input data.
-	if(pts2d.size() < 4 || pts2d.size() != pts3d.size())
-		return false;
-	
+    // Check input data.
+    if ( pts2d.size() < 4 || pts2d.size() != pts3d.size() ) {
+        return false;
+    }
+
     // select control point in world coordinate frame.
     std::vector<Eigen::Vector3d> world_control_points;
     selectControlPoints ( pts3d, world_control_points );
@@ -155,21 +156,21 @@ bool solvePnPbyEPnP ( const Eigen::Matrix3d& K, const std::vector< Eigen::Vector
     constructM ( K, hb_coordinates, pts2d, M );
     Eigen::Matrix<double, 12, 4> eigen_vectors;
     getFourEigenVectors ( M, eigen_vectors );
-	
+
     // construct L * \beta = \rho.
     Eigen::Matrix<double, 6, 10> L;
     computeL ( eigen_vectors, L );
 
     Eigen::Matrix<double, 6, 1> rho;
     computeRho ( world_control_points, rho );
-	
+
     // Case N = 2.
     Eigen::Vector4d betas;
     Eigen::Matrix3d tmp_R;
     Eigen::Vector3d tmp_t;
 
     {
-		solveBetaN2 ( eigen_vectors, L, rho, betas );
+        solveBetaN2 ( eigen_vectors, L, rho, betas );
         optimizeBeta ( L, rho, betas );
 
         std::vector<Eigen::Vector3d> camera_control_points;
@@ -183,10 +184,10 @@ bool solvePnPbyEPnP ( const Eigen::Matrix3d& K, const std::vector< Eigen::Vector
     double err2 = reprojectionError ( K, pts3d, pts2d, tmp_R, tmp_t );
     R = tmp_R;
     t = tmp_t;
-	
+
     // Case N = 3.
     {
-		solveBetaN3 (eigen_vectors, L, rho, betas );
+        solveBetaN3 ( eigen_vectors, L, rho, betas );
         optimizeBeta ( L, rho, betas );
 
         std::vector<Eigen::Vector3d> camera_control_points;
@@ -201,28 +202,28 @@ bool solvePnPbyEPnP ( const Eigen::Matrix3d& K, const std::vector< Eigen::Vector
     if ( err3 < err2 ) {
         R = tmp_R;
         t = tmp_t;
-    }else{
-		err3 = err2;
-	}
+    } else {
+        err3 = err2;
+    }
 
     // Case N = 4.
     {
-		solveBetaN4 ( eigen_vectors, L, rho, betas );
-		optimizeBeta ( L, rho, betas );
-		
-		std::vector<Eigen::Vector3d> camera_control_points;
-		computeCameraControlPoints ( eigen_vectors, betas,  camera_control_points );
-		
-		std::vector<Eigen::Vector3d> pts3d_camera;
-		rebuiltPts3dCamera ( camera_control_points, hb_coordinates,  pts3d_camera );
-		
-		computeRt ( pts3d_camera, pts3d, tmp_R, tmp_t );
-	}
-	double err4 = reprojectionError ( K, pts3d, pts2d, tmp_R, tmp_t );
-	if ( err4 < err3 ) {
-		R = tmp_R;
-		t = tmp_t;
-	}
+        solveBetaN4 ( eigen_vectors, L, rho, betas );
+        optimizeBeta ( L, rho, betas );
+
+        std::vector<Eigen::Vector3d> camera_control_points;
+        computeCameraControlPoints ( eigen_vectors, betas,  camera_control_points );
+
+        std::vector<Eigen::Vector3d> pts3d_camera;
+        rebuiltPts3dCamera ( camera_control_points, hb_coordinates,  pts3d_camera );
+
+        computeRt ( pts3d_camera, pts3d, tmp_R, tmp_t );
+    }
+    double err4 = reprojectionError ( K, pts3d, pts2d, tmp_R, tmp_t );
+    if ( err4 < err3 ) {
+        R = tmp_R;
+        t = tmp_t;
+    }
 
     return true;
 } // solve PnP by EPnP
@@ -248,13 +249,9 @@ void selectControlPoints ( const std::vector< Eigen::Vector3d >& pts3d, std::vec
     }
     Eigen::Matrix3d ATA = A.transpose() * A;
 
-//     Eigen::EigenSolver<Eigen::Matrix3d> es ( ATA );
-//     Eigen::Matrix3d D = es.pseudoEigenvalueMatrix();
-//     Eigen::Matrix3d V = es.pseudoEigenvectors();
-// 	
-	Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> es(ATA);
-	Eigen::Vector3d D = es.eigenvalues();
-	Eigen::MatrixXd V = es.eigenvectors();
+    Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> es ( ATA );
+    Eigen::Vector3d D = es.eigenvalues();
+    Eigen::MatrixXd V = es.eigenvectors();
 
     Eigen::Vector3d cw2 = cw1 + sqrt ( D ( 0 ) / n ) * V.block ( 0, 0, 3, 1 );
     Eigen::Vector3d cw3 = cw1 + sqrt ( D ( 1 ) / n ) * V.block ( 0, 1, 3, 1 );
@@ -361,12 +358,12 @@ void constructM ( const Eigen::Matrix3d& K, const std::vector< Eigen::Vector4d >
 
 void getFourEigenVectors ( const Eigen::MatrixXd& M, Eigen::Matrix< double, int ( 12 ), int ( 4 ) >& eigen_vectors )
 {
- 	Eigen::Matrix<double, 12, 12> MTM = M.transpose() * M;
- 	Eigen::SelfAdjointEigenSolver<Eigen::Matrix<double, 12, 12>> es(MTM);
+    Eigen::Matrix<double, 12, 12> MTM = M.transpose() * M;
+    Eigen::SelfAdjointEigenSolver<Eigen::Matrix<double, 12, 12>> es ( MTM );
 
- 	Eigen::MatrixXd e_vectors = es.eigenvectors();
-	
-	eigen_vectors.block(0,0, 12, 4) = e_vectors.block(0, 0, 12, 4);
+    Eigen::MatrixXd e_vectors = es.eigenvectors();
+
+    eigen_vectors.block ( 0,0, 12, 4 ) = e_vectors.block ( 0, 0, 12, 4 );
 }
 
 void computeL ( const Eigen::Matrix< double, int ( 12 ), int ( 4 ) >& eigen_vectors, Eigen::Matrix< double, int ( 6 ), int ( 10 ) >& L )
@@ -426,7 +423,7 @@ void computeRho ( const std::vector< Eigen::Vector3d >& control_points, Eigen::M
     }
 }
 
-void solveBetaN2 (const Eigen::Matrix<double, 12, 4>& eigen_vectors,  const Eigen::Matrix< double, int ( 6 ), int ( 10 ) >& L, const Eigen::Matrix<double, 6, 1>& rho, Eigen::Vector4d& betas )
+void solveBetaN2 ( const Eigen::Matrix<double, 12, 4>& eigen_vectors,  const Eigen::Matrix< double, int ( 6 ), int ( 10 ) >& L, const Eigen::Matrix<double, 6, 1>& rho, Eigen::Vector4d& betas )
 {
     //                  [B11 B12 B22 B13 B23 B33 B14 B24 B34 B44]
     // betas_approx_2 = [B11 B12 B22                            ]
@@ -448,17 +445,16 @@ void solveBetaN2 (const Eigen::Matrix<double, 12, 4>& eigen_vectors,  const Eige
 
     betas[2] = 0.0;
     betas[3] = 0.0;
-	
-	// Check betas.
-	std::vector<Eigen::Vector3d> camera_control_points;
-	computeCameraControlPoints(eigen_vectors, betas, camera_control_points);
-	if(isGoodBetas(camera_control_points) == false)
-	{
-		betas = -betas;
-	}
+
+    // Check betas.
+    std::vector<Eigen::Vector3d> camera_control_points;
+    computeCameraControlPoints ( eigen_vectors, betas, camera_control_points );
+    if ( isGoodBetas ( camera_control_points ) == false ) {
+        betas = -betas;
+    }
 }
 
-void solveBetaN3 (const Eigen::Matrix<double, 12, 4>& eigen_vectors,  const Eigen::Matrix< double, int ( 6 ), int ( 10 ) >& L, const Eigen::Matrix< double, int ( 6 ), int ( 1 ) >& rho, Eigen::Vector4d& betas )
+void solveBetaN3 ( const Eigen::Matrix<double, 12, 4>& eigen_vectors,  const Eigen::Matrix< double, int ( 6 ), int ( 10 ) >& L, const Eigen::Matrix< double, int ( 6 ), int ( 1 ) >& rho, Eigen::Vector4d& betas )
 {
     //                  [B11 B12 B22 B13 B23 B33 B14 B24 B34 B44]
     // betas_approx_3 = [B11 B12 B22 B13 B23                    ]
@@ -478,17 +474,16 @@ void solveBetaN3 (const Eigen::Matrix<double, 12, 4>& eigen_vectors,  const Eige
     }
     betas[2] = b5[3] / betas[0];
     betas[3] = 0.0;
-	
-	// Check betas.
-	std::vector<Eigen::Vector3d> camera_control_points;
-	computeCameraControlPoints(eigen_vectors, betas, camera_control_points);
-	if(isGoodBetas(camera_control_points) == false)
-	{
-		betas = -betas;
-	}
+
+    // Check betas.
+    std::vector<Eigen::Vector3d> camera_control_points;
+    computeCameraControlPoints ( eigen_vectors, betas, camera_control_points );
+    if ( isGoodBetas ( camera_control_points ) == false ) {
+        betas = -betas;
+    }
 }
 
-void solveBetaN4 (const Eigen::Matrix<double, 12, 4>& eigen_vectors,  const Eigen::Matrix< double, int ( 6 ), int ( 10 ) >& L, const Eigen::Matrix< double, int ( 6 ), int ( 1 ) >& rho, Eigen::Vector4d& betas )
+void solveBetaN4 ( const Eigen::Matrix<double, 12, 4>& eigen_vectors,  const Eigen::Matrix< double, int ( 6 ), int ( 10 ) >& L, const Eigen::Matrix< double, int ( 6 ), int ( 1 ) >& rho, Eigen::Vector4d& betas )
 {
     // betas10        = [B11 B12 B22 B13 B23 B33 B14 B24 B34 B44]
     // betas_approx_1 = [B11 B12     B13         B14]
@@ -511,15 +506,14 @@ void solveBetaN4 (const Eigen::Matrix<double, 12, 4>& eigen_vectors,  const Eige
         betas[2] = b4[2] / betas[0];
         betas[3] = b4[3] / betas[0];
     }
-    
+
     // Check betas.
     std::vector<Eigen::Vector3d> camera_control_points;
-	computeCameraControlPoints(eigen_vectors, betas, camera_control_points);
-	if(isGoodBetas(camera_control_points) == false)
-	{
-		betas = -betas;
-	}
-    
+    computeCameraControlPoints ( eigen_vectors, betas, camera_control_points );
+    if ( isGoodBetas ( camera_control_points ) == false ) {
+        betas = -betas;
+    }
+
 }
 
 void optimizeBeta ( const Eigen::Matrix< double, int ( 6 ), int ( 10 ) >& L, const Eigen::Matrix< double, int ( 6 ), int ( 1 ) >& rho, Eigen::Vector4d& betas )
@@ -577,29 +571,24 @@ void computeCameraControlPoints ( const Eigen::Matrix< double, int ( 12 ), int (
 }
 
 
-bool isGoodBetas(const std::vector<Eigen::Vector3d>& camera_control_points)
+bool isGoodBetas ( const std::vector<Eigen::Vector3d>& camera_control_points )
 {
-	int num_positive = 0;
-	int num_negative = 0;
-	
-	for(int i  =0; i < 4; i ++)
-	{
-		if(camera_control_points.at(i)[2] > 0)
-		{
-			num_positive++;
-		}
-		else
-		{
-			num_negative ++;
-		}
-	}
-	
-	if(num_negative >= num_positive)
-	{
-		return false;
-	}
-	
-	return true;
+    int num_positive = 0;
+    int num_negative = 0;
+
+    for ( int i  =0; i < 4; i ++ ) {
+        if ( camera_control_points.at ( i ) [2] > 0 ) {
+            num_positive++;
+        } else {
+            num_negative ++;
+        }
+    }
+
+    if ( num_negative >= num_positive ) {
+        return false;
+    }
+
+    return true;
 }
 
 
