@@ -1,3 +1,5 @@
+// Copyright (C) 2019 Dongsheng Yang <ydsf16@buaa.edu.cn>
+//(Biologically Inspired Mobile Robot Laboratory, Robotics Institute, Beihang University)
 
 #ifndef PNP_SOLVER_H
 #define PNP_SOLVER_H
